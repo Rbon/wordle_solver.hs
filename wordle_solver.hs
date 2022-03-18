@@ -1,3 +1,5 @@
+import qualified Data.Text as T
+
 type WordleLetter = (Char, Int)
 
 main = do
@@ -8,11 +10,14 @@ main = do
 (|>) x f = f x
 infixl 1 |>
 
-(>>>) :: (a -> b) -> (b -> c) -> a -> c
-(>>>) = flip (.)
+(||>) x f = x |> uncurry f
+infixl 1 ||>
 
-(|*>) x f = x |> uncurry f
-infixl 1 |*>
+(|->) :: (a -> b) -> (b -> c) -> a -> c
+(|->) = flip (.)
+
+(|=>) f1 f2 = f1 |-> uncurry f2
+infixl 1 |=>
 
 generateWords :: String -> [String]
 generateWords bads = do
@@ -21,57 +26,47 @@ generateWords bads = do
     sequence [chars, chars, chars, chars, chars]
 
 fitsAllGreens :: String -> [WordleLetter] -> Bool
-fitsAllGreens = all . atIndex
+fitsAllGreens = all . uncurry . atIndex
 
--- def filter_words(words, greens, yellows, unknown, bads) =
---     words \ 
---     |> fmap$(tuple) \ # this is needed for test parity
---     |> filter$(check_word$(greens, yellows, unknown, bads)) \
---     |> tuple
+fitsYellow :: String -> [Int] -> WordleLetter -> Bool
+fitsYellow word unknowns (char, pos) =
+    not $ atIndex word char pos && atAnyIndex word char unknowns
 
-fitsYellow :: String -> WordleLetter -> [Int] -> Bool
-fitsYellow word (char, pos) unknowns =
-    not (atIndex word (char, pos)) && atAnyIndex (word, char) unknowns
+fitsAllYellows :: String -> [Int] -> [WordleLetter] -> Bool
+fitsAllYellows = curry $ all . uncurry fitsYellow
 
-uAtIndex :: String -> Char -> Int -> Bool
-uAtIndex = curry . atIndex
+atAnyIndex :: String -> Char -> [Int] -> Bool
+atAnyIndex = curry $ any . uncurry atIndex
 
-atAnyIndex :: (String, Char) -> [Int] -> Bool
-atAnyIndex = any . uncurry (curry . atIndex)
+atIndex :: String -> Char -> Int -> Bool
+atIndex word c pos = word !! pos == c
 
-atIndex :: String -> WordleLetter -> Bool
-atIndex word (c, pos) = word !! pos == c
+lettersInWord ::String -> [Char] -> Bool 
+lettersInWord = any . flip elem
 
--- atAnyIndex :: Eq a => a -> [a] -> [Int] -> Bool
--- atAnyIndex x ys poses = poses |> map (atIndex x ys) |> all (== True)
+checkWord :: [WordleLetter]
+          -> [WordleLetter]
+          -> [Int]
+          -> [Char]
+          -> String
+          -> Bool
+checkWord greens yellows unknown bads word = do
+    let check1 = not $ lettersInWord word bads
+    let check2 = fitsAllGreens word greens
+    let check3 = fitsAllYellows word unknown yellows
+    check1 && check2 && check3
 
--- atAnyIndex :: Eq a => a -> [a] -> [Int] -> Bool
--- atAnyIndex unknown word yellow= unknown |> (atIndex word )
+filterWords :: [WordleLetter]
+            -> [WordleLetter]
+            -> [Int]
+            -> [Char]
+            -> [String]
+            -> [String]
+filterWords greens yellows unknown bads =
+    filter (checkWord greens yellows unknown bads)
 
--- def fits_yellow(word, unknown, yellow):
---     if word[yellow[1]] != yellow[0]:
---         res = False
---         for u in unknown:
---             if word[u] == yellow[0]:
---                 return True
---     return False
+splitOnStr :: String -> String -> [String]
+splitOnStr delim str = str |> T.pack |> T.splitOn (T.pack delim) |> map T.unpack
 
--- def fits_all_yellows(yellows, unknown, word) -> int:
---     for yellow in yellows:
---         if not fits_yellow(word, unknown, yellow):
---             return False
---     return True
-
--- def bad_letters_in_word(bads, word):
---     for bad in bads:
---         if bad in word:
---             return True
---     return False
-
--- def check_word(greens, yellows, unknown, bads, word):
---     if not word |> bad_letters_in_word$(bads):
---         if word |> fits_all_greens$(greens):
---             if word |> fits_all_yellows$(yellows, unknown):
---                 # if ''.join(word) in words.all_words:
---                 return True
---     return False
+pairs :: String -> [(Char, Char)]
+pairs = splitOnStr " = " |-> (\[x, y] -> (x,y)) |=> zip
