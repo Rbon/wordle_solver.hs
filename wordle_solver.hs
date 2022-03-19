@@ -1,6 +1,31 @@
 import LibRbon
+import Distribution.PackageDescription (defaultIncludeRenaming)
 
-type WordleLetter = (Char, Int)
+type GuessLetter = (Char, Char, Int)
+
+type Guess = [GuessLetter]
+
+type Board = [Guess] 
+
+type PossibleWord = String
+
+type Bad = Char
+
+type Unknown = Int
+
+type Green = WordleLetter
+
+type Yellow = WordleLetter
+
+type State = (
+    [PossibleWord], 
+    [Green], 
+    [Yellow],
+    [Bad],
+    [Unknown],
+    Board)
+
+type WordleLetter = (Char, Char, Int)
 
 main = do
     let x = generateWords "abcdef"
@@ -12,11 +37,13 @@ generateWords bads = do
     let chars = alphabet |> filter (`notElem` bads)
     sequence [chars, chars, chars, chars, chars]
 
-fitsAllGreens :: String -> [WordleLetter] -> Bool
-fitsAllGreens = atIndex |-> uncurry |-> all
+fitsAllGreens :: String -> [Green] -> Bool
+fitsAllGreens = do
+    let fitsGreen word (c, _, i) = atIndex word c i
+    fitsGreen |-> all
 
 fitsYellow :: String -> [Int] -> WordleLetter -> Bool
-fitsYellow word unknowns (char, pos) =
+fitsYellow word unknowns (char, _, pos) =
     not $ atIndex word char pos && atAnyIndex word char unknowns
 
 fitsAllYellows :: String -> [Int] -> [WordleLetter] -> Bool
@@ -52,41 +79,42 @@ filterWords :: [WordleLetter]
 filterWords greens yellows unknown bads =
     filter (checkWord greens yellows unknown bads)
 
+guess :: String -> Guess
+guess = do
+    let addNumbers n (char, color) = (char, color, n)
+    splitOnString " = "
+        |-> (\[x, y] -> (x,y))
+        |=> zip
+        |-> zipWith addNumbers [0..4]
 
+parse :: String -> State
+parse command = do
+    let letters = command |> guess
+    let greens = letters |> filter (\(_, c, _) -> c == 'g')
+    let yellows = letters |> filter (\(_, c, _) -> c == 'y')
+    let bads = letters
+               |> filter (\(_, c, _) -> c == 'b')
+               |> map (\(c, _, _) -> c)
+    ([], greens, yellows, bads, [], [letters])
 
-pairs :: String -> [(Char, Char)]
-pairs = splitOnString " = " |-> (\[x, y] -> (x,y)) |=> zip
+updateState :: State -> State -> State
+updateState (w1, g1, y1, ba1, u1, bo1) (w2, g2, y2, ba2, u2, bo2) = do
+    let words = w1 ++ w2
+    let greens = g1 ++ g2
+    let yellows = y1 ++ y2
+    let bads = ba1 ++ ba2
+    let unknowns = (g1, g2) ||> determineUnknown
+    let board = bo1 ++ bo2
+    (words, greens, yellows, bads, unknowns, board)
 
+determineUnknown :: [Green] -> [Green] -> [Unknown]
+determineUnknown g1 g2 = do
+    let u = [0..4]
+    let greenIndexes1 = g1 |> map (\(_, _, x) -> x)
+    let greenIndexes2 = g2 |> map (\(_, _, x) -> x)
+    let totalGreenIndexes = greenIndexes1 ++ greenIndexes2
+    u |> filter (`elem` totalGreenIndexes)
 
-
--- def parse(command: str) -> State:
---     pairs = command |> split $ (" = ") |*> zip
---     greens = []
---     yellows = []
---     bads = []
---     unknown = [0,1,2,3,4]
---     index = 0
---     for i in pairs:
---         if i[1] == 'g':
---             greens.append((i[0], index))
---             if index in unknown:
---                 unknown.remove(index) 
---         elif i[1] == 'y':
---             yellows.append((i[0], index))
---         elif i[1] == 'b':
---             bads.append((i[0]))
---         index += 1
---     print 
---     return State((), greens, yellows, bads, unknown, [pairs |> tuple])
-
--- def add_state(state1: State, state2: State) -> State:
---     words = state1.words :: state2.words
---     greens = state1.greens :: state2.greens
---     yellows = state1.yellows :: state2.yellows
---     bads = state1.bads :: state2.bads
---     unknown = state1.unknown :: state2.unknown
---     board = state1.board + state2.board
---     return State(words, greens, yellows, bads, unknown, board)
 
 -- def step(
 --     command: str,
