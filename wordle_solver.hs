@@ -1,5 +1,9 @@
 import LibRbon
-import Distribution.PackageDescription (defaultIncludeRenaming)
+-- import Words as W
+import Text.Printf
+
+-- what is this I never typed this
+-- import Distribution.PackageDescription (defaultIncludeRenaming)
 
 type GuessLetter = (Char, Char, Int)
 
@@ -17,25 +21,27 @@ type Green = WordleLetter
 
 type Yellow = WordleLetter
 
-type State = (
-    [PossibleWord], 
-    [Green], 
-    [Yellow],
-    [Bad],
-    [Unknown],
-    Board)
+data State = State {
+    wordList    :: [PossibleWord],
+    greens   :: [Green],
+    yellows  :: [Yellow],
+    bads     :: [Bad],
+    unknowns :: [Unknown],
+    board    :: Board
+    } deriving (Show)
 
 type WordleLetter = (Char, Char, Int)
 
-main = do
-    let x = generateWords "abcdef"
-    print x
+-- main = do
+--     let x = generateWords "abcdef"
+--     print x
 
-generateWords :: String -> [String]
-generateWords bads = do
+generateWords :: State -> State
+generateWords state = do
     let alphabet = "abcdefghijklmnopqrstuvwxyz"
-    let chars = alphabet |> filter (`notElem` bads)
-    sequence [chars, chars, chars, chars, chars]
+    let chars = alphabet |> filter (`notElem` bads state)
+    let words = sequence [chars, chars, chars, chars, chars]
+    State words (greens state) (yellows state) (bads state) (unknowns state) (board state)
 
 fitsAllGreens :: String -> [Green] -> Bool
 fitsAllGreens = do
@@ -70,14 +76,10 @@ checkWord greens yellows unknown bads word = do
     let check3 = fitsAllYellows word unknown yellows
     check1 && check2 && check3
 
-filterWords :: [WordleLetter]
-            -> [WordleLetter]
-            -> [Int]
-            -> [Char]
-            -> [String]
-            -> [String]
-filterWords greens yellows unknown bads =
-    filter (checkWord greens yellows unknown bads)
+filterWords :: State -> State
+filterWords (State words greens yellows unknown bads board) = do
+    let new_words = filter (checkWord greens yellows bads unknown) words
+    State new_words greens yellows unknown bads board
 
 guess :: String -> Guess
 guess = do
@@ -95,17 +97,17 @@ parse command = do
     let bads = letters
                |> filter (\(_, c, _) -> c == 'b')
                |> map (\(c, _, _) -> c)
-    ([], greens, yellows, bads, [], [letters])
+    State [] greens yellows bads [] [letters]
 
 updateState :: State -> State -> State
-updateState (w1, g1, y1, ba1, u1, bo1) (w2, g2, y2, ba2, u2, bo2) = do
+updateState (State w1 g1 y1 ba1 u1 bo1) (State w2 g2 y2 ba2 u2 bo2) = do
     let words = w1 ++ w2
     let greens = g1 ++ g2
     let yellows = y1 ++ y2
     let bads = ba1 ++ ba2
     let unknowns = (g1, g2) ||> determineUnknown
     let board = bo1 ++ bo2
-    (words, greens, yellows, bads, unknowns, board)
+    State words greens yellows bads unknowns board
 
 determineUnknown :: [Green] -> [Green] -> [Unknown]
 determineUnknown g1 g2 = do
@@ -116,14 +118,36 @@ determineUnknown g1 g2 = do
     u |> filter (`elem` totalGreenIndexes)
 
 
--- def step(
---     command: str,
---     state: State = State(),
---     cheat_level: int = 1
---     ) -> State:
+step :: String -> State -> State
+step command state = do
+    let new_state = command |> parse
+    let state2 = updateState state new_state
+                 |> generateWords
+                 |> filterWords
+    State
+        (wordList state2)
+        (greens state2)
+        (yellows state2)
+        (bads state2)
+        (unknowns state2)
+        (board state2)
 
---     new_state = command |> parse
---     state = add_state(state, new_state)
+fullStep :: IO State
+fullStep = do
+    command <- getLine
+    let emptyState = State [] [] [] [] [] []
+    print "Working..."
+    let state = step command emptyState
+    print $ fancyPrint state
+    return state
+
+fancyPrint :: State -> String
+fancyPrint state = printf "Total words: %d" (length (wordList state))
+
+main :: IO ()
+main = do
+    state <- fullStep
+    main
 
 --     if state.words |> tuple |> len == 0:
 --         case cheat_level:   
@@ -141,35 +165,6 @@ determineUnknown g1 g2 = do
 --     else:
 --         words = state.words
 
---     "filtering words..." |> print
---     # start_time = time.perf_counter()
---     words = filter_words(words, state.greens, state.yellows, state.unknown, state.bads)
---     # end_time = time.perf_counter()
---     # "finished in: " + (end_time - start_time |> str) |> print
---     print("total words: " + str(len(words)) + '\n')
-
---     return State(
---         words,
---         state.greens,
---         state.yellows,
---         state.bads,
---         state.unknown,
---         state.board)
-
-
--- def count_vowels(word) = word |> filter $ (x -> x in 'aeiouy') |> tuple |> len
-
--- def reveal_4_vowel_words(word):
---     if (word |> count_vowels) == 4:
---         if not (len(word) != len(set(word))): # filter dupes
---             print word
-
--- def reveal_5_vowel_words(word):
---     if (word |> count_vowels) == 5:
---         if not (len(word) != len(set(word))): # filter dupes
---             print word       
-
--- def fancy_format(iterable) = '\n'.join(tuple(map(''.join, iterable)))
 
 -- def fancy_print(state: State, word_max: int = 1000):
 --     words = state.words |> fancy_format
