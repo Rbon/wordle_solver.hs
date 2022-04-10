@@ -1,165 +1,123 @@
-import LibRbon
-import Text.Printf ()
-import Data.Function (on)
-import Data.Sequence (takeWhileR, index)
-import GHC.Exts.Heap (GenClosure(what_next))
+-- TODO: clean up generateYellows
+--       use a plain text file instead of WordList
 
-data WordleLetter = WordleLetter {
-    char     :: Char       ,
-    inOneOf  :: Maybe [Int],
-    mustBeIn :: Maybe Int  ,
-    cantBeIn :: Maybe Int  }
-    deriving (Show)
+-- import Text.Printf ()
+import System.IO ( stdout, hFlush )
+import qualified Data.Text as T
+import qualified WordList as W
 
-type State = ([WordleLetter], [String])
+type Pair = (Char, Char)
+type Guess = [[Pair]]
+
+type Green = Char
+type Wrong = Char
+type Yellow = (Char, [Int])
+type Info = ([Green], [Yellow], [Wrong])
+
+-- | Compose two functions.
+-- except that @g@ will be fed /two/ arguments instead of one
+-- before handing its result to @f@.
+(...) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
+(f ... g) x y = f (g x y)
+infixr 8 ...
+
+remove :: Eq a => a -> [a] -> [a]
+remove = filter . (/=)
+
+prompt :: String -> IO String
+prompt text = do
+    putStr text
+    hFlush stdout
+    getLine
+
+splitOnString :: String -> String -> [String]
+splitOnString delim = map T.unpack . T.splitOn (T.pack delim) . T.pack
 
 main :: IO ()
-main = interactiveStep []
+main = interactiveStep "" W.allWords
 
-interactiveStep :: [String] -> IO ()
-interactiveStep wordList = do
+generatePairs :: String -> [Pair]
+generatePairs = uncurry zip . (\[x, y] -> (x,y)) . splitOnString " = "
+
+interactiveStep :: String -> [String] -> IO ()
+interactiveStep "" wordList = do
     command <- prompt "guess: "
+    interactiveStep command wordList
+
+interactiveStep "quit" wordList = do
+    putStr ""
+
+interactiveStep command wordList = do
     let newWordList = step command wordList
-    fancyPrint newWordList
-    interactiveStep newWordList
+    print newWordList
+    newCommand <- prompt "guess: "
+    interactiveStep newCommand newWordList
 
-fancyPrint :: [String] -> IO ()
-fancyPrint wordList
-    | length wordList > 99 = print (length wordList)
-    | otherwise            = print wordList
+generateGreens :: [Pair] -> [Char]
+generateGreens = map format where
+    format (char, color)
+        | color == 'g' = char
+        | otherwise    = '-'
 
-initStep :: String -> [String]
-initStep command = step command (generateWords $ commandToLetters command)
+matchGreens :: String -> [Char] -> Bool
+matchGreens = and ... zipWith matcher where
+    matcher char '-' = True
+    matcher char green = char == green
+
+generateWrongs :: [Pair] -> [Char]
+generateWrongs = map format . filter pred where
+    pred (_, color) = color == 'w'
+    format (char, _) = char
+
+matchWrongs :: String -> [Char] -> Bool
+matchWrongs = all . flip notElem
+
+generateYellows :: [Pair] -> [(Char, [Int])]
+generateYellows pairs = map properYellow allYellows where
+    indexedPairs = insertIndex pairs
+    combinePairList = zipWith (++)
+    -- known = combinePairList (map f pairs) greens
+    isYellow  (_, color, _) = color == 'y'
+    isUnknown (_, color, _) = color /= 'g'
+    onlyIndex (_, _    , n) = n
+
+    allYellows = filter isYellow indexedPairs
+    allUnknowns = map onlyIndex $ filter isUnknown indexedPairs
+    properYellow (char, color, n) = (char, remove n allUnknowns )
+
+    insertIndex pairs = zipWith f pairs indexes
+    f (x, y) n = (x, y, n)
+    indexes = map (flip (-) 1) [1 .. length pairs]
+
+matchYellows :: String -> [(Char, [Int])] -> Bool
+matchYellows = all . matchOneYellow where
+    matchOneYellow str (char, ns) = any (g str char) ns
+    g str char n = str !! n == char
+
+generateInfo :: String -> Info
+generateInfo command = (greens, yellows, wrongs) where
+    pairs = generatePairs command
+    greens = generateGreens pairs
+    yellows = generateYellows pairs
+    wrongs = generateWrongs pairs
+
+matchInfo :: Info -> String -> Bool
+matchInfo(greens, yellows, wrongs) str  =
+    matchesGreen && matchesYellow && matchesWrong where
+    matchesGreen = matchGreens str greens
+    matchesYellow = matchYellows str yellows
+    matchesWrong = matchWrongs str wrongs
 
 step :: String -> [String] -> [String]
-step command []       = initStep command
-step command wordList = filterWords (commandToLetters command) wordList
+step command wordList = newWords where
+    info = generateInfo command
+    newWords = filterWords info wordList
 
-initWords :: String -> [String]
-initWords = generateWords . commandToLetters
+filterWords :: Info ->  [String] -> [String]
+filterWords = filter . matchInfo
 
-commandToLetters :: String -> [WordleLetter]
-commandToLetters command =
-    let pairs = uncurry zip . (\[x, y] -> (x,y)) . splitOnString " = "
-        indexedPairs = insertIndex $ pairs command
-        unknowns = pairsToUnknowns indexedPairs
-        yellows = generateYellows indexedPairs unknowns
-        greens = generateGreens indexedPairs
-        wrongs = generateWrongs indexedPairs
-    in  greens ++ yellows ++ wrongs
-
-generateGreens :: [(Char, Char, Int)] -> [WordleLetter]
-generateGreens indexedPairs =
-    let pred (_, color, _) = color == 'g'
-        filteredPairs = filter pred indexedPairs
-        f (char, _, index) =
-            WordleLetter {
-                char = char,
-                cantBeIn = Nothing,
-                mustBeIn = Just index,
-                inOneOf  = Nothing}
-    in  map f filteredPairs
-
-generateYellows :: [(Char, Char, Int)] -> [Int] -> [WordleLetter]
-generateYellows indexedPairs unknowns =
-    let pred (_, color, _) = color == 'y'
-        filteredPairs = filter pred indexedPairs
-        realUnknowns = unknowns
-        f (char, color, index) =
-            WordleLetter {
-                char = char,
-                cantBeIn = Just index,
-                inOneOf  = Just (remove unknowns index),
-                mustBeIn = Nothing}
-    in  map f filteredPairs
-
-generateWrongs :: [(Char, Char, Int)] -> [WordleLetter]
-generateWrongs indexedPairs =
-    let pred (_, color, _) = color == 'w'
-        filteredPairs = filter pred indexedPairs
-        f (char, _, index) =
-            WordleLetter {
-                char     = char,
-                cantBeIn = Just index,
-                mustBeIn = Nothing,
-                inOneOf  = Nothing}
-    in  map f filteredPairs
-
-pairsToUnknowns :: [(Char, Char, Int)] -> [Int]
-pairsToUnknowns =
-    filter (\(_, color, _) -> color /= 'g')
-    |-> map (\(_, _, i) -> i)
-
-insertIndex :: [(Char, Char)] -> [(Char, Char, Int)]
-insertIndex pairs =
-    let f (x, y) n = (x, y, n)
-        indexes = map (flip (-) 1) [1 .. length pairs]
-    in  zipWith f pairs indexes
-
-isPossibleWord :: [WordleLetter] -> String -> Bool
-isPossibleWord ls s =
-    let atLeastOneElem c s xs = any ((== c) . (s !!)) xs
-        matchOneOf s c Nothing   = True 
-        matchOneOf s c (Just xs) = atLeastOneElem c s xs
-        matchCant  s c Nothing   = True
-        matchCant  s c (Just i)  = s !! i /= c
-        matchMust  s c Nothing   = True
-        matchMust  s c (Just i)  = s !! i == c
-        f s l =
-            matchOneOf s (char l) (inOneOf l)
-            && matchCant s (char l) (cantBeIn l)
-            && matchMust s (char l) (mustBeIn l)
-    in  all (f s) ls
-
-filterWords :: [WordleLetter] -> [String] -> [String]
-filterWords = filter . isPossibleWord
-
-pairs :: String -> [(Char, Char)]
-pairs = uncurry zip . (\[x, y] -> (x,y)) . splitOnString " = "
-
-generateWords :: [WordleLetter] -> [String]
-generateWords letters = sequence $ f letters where
-    f letters = filterPossibleChars letters initPossibles
-
-filterPossibleChars :: [WordleLetter] -> [String] -> [String]
-filterPossibleChars letters = filterCants cants . filterMusts musts where
-    musts = collectMusts letters
-    cants = collectCants letters
-
-filterMusts:: [[Char]] -> [String] -> [String]
-filterMusts = zipWith f where
-    f "" str = str
-    f xs str = xs
-
-filterCants :: [[Char]] -> [String] -> [String]
-filterCants = zipWith f where
-    f "" str = str
-    f xs str = foldl remove str xs
-
-collectMusts :: [WordleLetter] -> [[Char]]
-collectMusts = foldl1 (zipWith (++)) . map h where
-    initList = [[], [], [], [], []]
-    f xs c i = replace xs (i, [c])
-    g xs c Nothing  = xs
-    g xs c (Just i) = f xs c i
-    h letter = g initList (char letter) (mustBeIn letter)
-
-collectCants :: [WordleLetter] -> [[Char]]
-collectCants = foldl1 (zipWith (++)) . map h where
-    h letter = g initList (char letter) (cantBeIn letter)
-    g xs c Nothing  = xs
-    g xs c (Just i) = f xs c i
-    f xs c i = replace xs (i, [c])
-    initList = [[], [], [], [], []]
-
--- stolen from stackoverflow
-replace :: (Num a, Ord a) => [b] -> (a, b) -> [b]
-replace [] _ = []
-replace (_:xs) (0,a) = a:xs
-replace (x:xs) (n,a) =
-  if n < 0
-    then x:xs
-    else x: replace xs (n-1,a)
+-- beyond here is deprecated stuff,
+-- using generated words instead of a master list
 
 initPossibles :: [String]
 initPossibles = [
@@ -168,3 +126,18 @@ initPossibles = [
     "abcdefghijklmnopqrstuvwxyz" ,
     "abcdefghijklmnopqrstuvwxyz" ,
     "abcdefghijklmnopqrstuvwxyz" ]
+
+initStep :: String -> [String]
+initStep command = newWords where
+    p = generatePairs command
+    info = generateInfo command
+    newPossibles = filterPossibleChars p initPossibles
+    newWords = generateWords info newPossibles
+
+filterPossibleChars :: [Pair] -> [String] -> [String]
+filterPossibleChars = zipWith filter1 where
+    filter1 (char, 'g') _   = [char]
+    filter1 (char, _  ) str = remove char str
+
+generateWords :: Info -> [String] -> [String]
+generateWords pairs = filterWords pairs . sequence
