@@ -7,8 +7,6 @@ import qualified Data.Text as T
 import qualified WordList as W
 
 type Pair = (Char, Char)
-type Guess = [[Pair]]
-
 type Green = Char
 type Wrong = Char
 type Yellow = (Char, [Int])
@@ -72,6 +70,27 @@ generateWrongs = map format . filter pred where
 matchWrongs :: String -> [Char] -> Bool
 matchWrongs = all . flip notElem
 
+generateWrongs' :: [Pair] -> [String]
+generateWrongs' pairs = map (propagateWrong (greens pairs)) (wrongs pairs) where
+    greens pairs = map fst (filter isGreen pairs)
+    wrongs pairs = map fst (filter isWrong pairs)
+    isGreen (_, color) = color == 'g'
+    isWrong (_, color) = color == 'w'
+    propagateWrong greens wrong = zipWith f (allWrong greens wrong) greens
+    f wrong '-' = wrong
+    f _      _  = '-'
+    allWrong greens wrong = replicate (length greens) wrong
+
+
+
+-- "idiot = wygyw"
+-- [('i','w'),('d','y'),('i','g'),('o','y'),('t','w')]
+-- generateWrongs = [
+--     "ii-ii"
+--     "tt-tt"
+-- ]
+-- populateWrongs = "ii-ii"
+
 generateYellows :: [Pair] -> [(Char, [Int])]
 generateYellows pairs = map properYellow allYellows where
     indexedPairs = insertIndex pairs
@@ -87,7 +106,7 @@ generateYellows pairs = map properYellow allYellows where
 
     insertIndex pairs = zipWith f pairs indexes
     f (x, y) n = (x, y, n)
-    indexes = map (flip (-) 1) [1 .. length pairs]
+    indexes = [0 .. (length pairs - 1)]
 
 matchYellows :: String -> [(Char, [Int])] -> Bool
 matchYellows = all . matchOneYellow where
