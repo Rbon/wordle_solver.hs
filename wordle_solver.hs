@@ -5,12 +5,15 @@
 import System.IO ( stdout, hFlush )
 import qualified Data.Text as T
 import qualified WordList as W
+import Data.Function ( on )
 
 type Pair = (Char, Char)
 type Green = Char
 type Wrong = Char
 type Yellow = (Char, [Int])
 type Info = ([Green], [Yellow], [Wrong])
+
+type Matcher = String -> [Char] -> Bool
 
 -- | Compose two functions.
 -- except that @g@ will be fed /two/ arguments instead of one
@@ -85,11 +88,36 @@ generateWrongs' pairs = map (propagateWrong (greens pairs)) (wrongs pairs) where
 
 -- "idiot = wygyw"
 -- [('i','w'),('d','y'),('i','g'),('o','y'),('t','w')]
+--
 -- generateWrongs = [
---     "ii-ii"
---     "tt-tt"
--- ]
--- populateWrongs = "ii-ii"
+--     (matchNone, "ii-ii"),
+--     (matchNone, "tt-tt")]
+---
+-- generateYellows = [
+--     (matchAtLeastOne, "d--dd"),
+--     (matchAtLeastOne, "oo--o"),
+--     (matchNone,       "-d---"),
+--     (matchNone,       "---o-")]
+--
+-- generateGreens = [
+--     (matchAll, "--i--")]
+
+needsToBeMatched :: String -> [Char] -> String
+needsToBeMatched = zipWith f where
+    f _    '-' = '-'
+    f char  _  = char
+
+matchAtLestOne :: String -> [Char] -> Bool
+matchAtLestOne = or ... zipWith (==) `on` filter (/= '-')
+
+matchNone :: String -> [Char] -> Bool
+matchNone = not ... matchAtLestOne
+
+checkAgainst :: String -> Matcher -> [Char] -> Bool
+checkAgainst str matcher chrs = matcher (needsToBeMatched str chrs) chrs
+
+-- matchAtLestOne :: String -> [Char] -> Bool
+-- matchAtLestOne = or ... zipWith (==)
 
 generateYellows :: [Pair] -> [(Char, [Int])]
 generateYellows pairs = map properYellow allYellows where
