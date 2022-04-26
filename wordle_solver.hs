@@ -1,5 +1,4 @@
--- TODO: clean up generateYellows
---       use a plain text file instead of WordList
+-- TODO: reimplement the main filter
 
 -- import Text.Printf ()
 import System.IO ( stdout, hFlush )
@@ -98,17 +97,35 @@ generateWrongs (word, result) = map (matchNone,) properWrongs where
     unknowns = generateUnknowns (word, result)
     properWrongs = map (propagateLetter unknowns) wrongs
 
-propagateLetter :: String -> Char -> String
-propagateLetter str char = map (f char) str where
-    f char1 char2 = if char2 /= '-' then char1 else '-'
-
 generateWrongs' :: (String, String) -> String
 generateWrongs' (word, result) = zipWith f word result where
     f char1 char2 = if char2 == 'w' then char1 else '-'
 
+propagateLetter :: String -> Char -> String
+propagateLetter str char = map (f char) str where
+    f char1 char2 = if char2 /= '-' then char1 else '-'
+
 generateUnknowns :: (String, String) -> String
 generateUnknowns (word, result) = zipWith f word result where
     f char1 char2 = if char2 /= 'g' then char1 else '-'
+
+generateYellows :: (String, String) -> [Info]
+generateYellows (word, result) = output where
+    wrongs = generateYellows' (word, result)
+    yellows = filter (/= '-') $ generateYellows' (word, result)
+    unknowns = generateUnknowns (word, result)
+    properYellows = map (propagateLetter unknowns) yellows
+    properYellows' = map (matchAny,) $ excludeWrong wrongs properYellows
+    output = (matchNone, wrongs) : properYellows'
+
+excludeWrong :: String -> [String] -> [String]
+excludeWrong = map . zipWith f where
+    f '-' chr2 = chr2
+    f chr1 chr2 = if chr1 /= chr2 then chr2 else '-'
+
+generateYellows' :: (String, String) -> String
+generateYellows' (word, result) = zipWith f word result where
+    f char1 char2 = if char2 == 'y' then char1 else '-'
 
 generateInfo :: (String, String) -> [Info]
 generateInfo guess = generateGreens guess ++ generateWrongs guess
@@ -150,27 +167,27 @@ checkAgainst str (matcher, chrs) = matcher (needsToBeMatched str chrs) chrs
 checkAgainstAll :: String -> [(Matcher, [Char])] -> Bool
 checkAgainstAll = all . checkAgainst
 
-generateYellows :: [Pair] -> [(Char, [Int])]
-generateYellows pairs = map properYellow allYellows where
-    indexedPairs = insertIndex pairs
-    combinePairList = zipWith (++)
-    -- known = combinePairList (map f pairs) greens
-    isYellow  (_, color, _) = color == 'y'
-    isUnknown (_, color, _) = color /= 'g'
-    onlyIndex (_, _    , n) = n
+-- generateYellows :: [Pair] -> [(Char, [Int])]
+-- generateYellows pairs = map properYellow allYellows where
+--     indexedPairs = insertIndex pairs
+--     combinePairList = zipWith (++)
+--     -- known = combinePairList (map f pairs) greens
+--     isYellow  (_, color, _) = color == 'y'
+--     isUnknown (_, color, _) = color /= 'g'
+--     onlyIndex (_, _    , n) = n
 
-    allYellows = filter isYellow indexedPairs
-    allUnknowns = map onlyIndex $ filter isUnknown indexedPairs
-    properYellow (char, color, n) = (char, remove n allUnknowns )
+--     allYellows = filter isYellow indexedPairs
+--     allUnknowns = map onlyIndex $ filter isUnknown indexedPairs
+--     properYellow (char, color, n) = (char, remove n allUnknowns )
 
-    insertIndex pairs = zipWith f pairs indexes
-    f (x, y) n = (x, y, n)
-    indexes = [0 .. (length pairs - 1)]
+--     insertIndex pairs = zipWith f pairs indexes
+--     f (x, y) n = (x, y, n)
+--     indexes = [0 .. (length pairs - 1)]
 
-matchYellows :: String -> [(Char, [Int])] -> Bool
-matchYellows = all . matchOneYellow where
-    matchOneYellow str (char, ns) = any (g str char) ns
-    g str char n = str !! n == char
+-- matchYellows :: String -> [(Char, [Int])] -> Bool
+-- matchYellows = all . matchOneYellow where
+--     matchOneYellow str (char, ns) = any (g str char) ns
+--     g str char n = str !! n == char
 
 -- generateInfo command = (greens, yellows, wrongs) where
 --     pairs = generatePairs command
