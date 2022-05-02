@@ -1,4 +1,4 @@
--- TODO: main
+-- TODO: refactors
 
 -- import Text.Printf ()
 {-# LANGUAGE TupleSections #-}
@@ -6,13 +6,14 @@ import System.IO ( stdout, hFlush )
 import qualified Data.Text as T
 import qualified WordList as W
 import Data.Function ( on )
+import Data.List (sort)
 
 type Pair = (Char, Char)
 type Info = (Matcher, [Char])
 type Matcher = String -> [Char] -> Bool
 
--- instance Show (a -> b) where
---          show a = "function"
+instance Show (a -> b) where
+         show a = "function"
 
 -- | Compose two functions.
 -- except that @g@ will be fed /two/ arguments instead of one
@@ -30,25 +31,27 @@ prompt text = putStr text >> hFlush stdout >> getLine
 splitOnString :: String -> String -> [String]
 splitOnString delim = map T.unpack . T.splitOn (T.pack delim) . T.pack
 
--- main :: IO ()
--- main = interactiveStep "" W.allWords
+main :: IO ()
+main = mainLoop []
+
+mainLoop :: [String] -> IO ()
+mainLoop words = do
+    if null words then
+        mainLoop $ sort W.allWords -- this sort is here to minimize cheatiness
+    else do
+        userInput <- prompt "guess: "
+        if userInput == "quit" then
+            putStrLn "quitting"
+        else do
+            let newWords = step words userInput
+            print newWords
+            mainLoop newWords
+
+step :: [String] -> String -> [String]
+step = flip $ filterWords . generateInfo . generateGuess
 
 generatePairs :: String -> [Pair]
 generatePairs = uncurry zip . (\[x, y] -> (x,y)) . splitOnString " = "
-
--- interactiveStep :: String -> [String] -> IO ()
--- interactiveStep "" wordList = do
---     command <- prompt "guess: "
---     interactiveStep command wordList
-
--- interactiveStep "quit" wordList = do
---     putStr ""
-
--- interactiveStep command wordList = do
---     let newWordList = step command wordList
---     print newWordList
---     newCommand <- prompt "guess: "
---     interactiveStep newCommand newWordList
 
 generateGuess :: String -> (String, String)
 generateGuess = (\[x, y] -> (x,y)) . splitOnString " = "
@@ -59,9 +62,15 @@ generateGreens (word, result) = [(matchAll, zipWith f word result)] where
 
 generateWrongs :: (String, String) -> [Info]
 generateWrongs (word, result) = map (matchNone,) properWrongs where
-    wrongs = filter (/= '-') $ generateWrongs' (word, result)
+    wrongs' = filter (/= '-') $ generateWrongs' (word, result)
+    yellows = filter (/= '-') $ generateYellows' (word, result)
+    wrongs = accountForYellows wrongs' yellows
     unknowns = generateUnknowns (word, result)
     properWrongs = map (propagateLetter unknowns) wrongs
+
+accountForYellows :: String -> String -> String
+accountForYellows wrongs yellows = filter (f yellows) wrongs where
+    f yellows wrong = wrong `notElem` yellows
 
 generateWrongs' :: (String, String) -> String
 generateWrongs' (word, result) = zipWith f word result where
@@ -99,22 +108,6 @@ generateInfo guess =
     ++ generateWrongs guess
     ++ generateYellows guess
 
--- "idiot = wygyw"
--- [('i','w'),('d','y'),('i','g'),('o','y'),('t','w')]
---
--- generateWrongs = [
---     (matchNone, "ii-ii"),
---     (matchNone, "tt-tt")]
----
--- generateYellows = [
---     (matchAtLeastOne, "d--dd"),
---     (matchAtLeastOne, "oo--o"),
---     (matchNone,       "-d---"),
---     (matchNone,       "---o-")]
---
--- generateGreens = [
---     (matchAll, "--i--")]
-
 needsToBeMatched :: String -> [Char] -> String
 needsToBeMatched = zipWith f where
     f _    '-' = '-'
@@ -138,6 +131,7 @@ checkAgainstAll = all . checkAgainst
 filterWords ::[Info] -> [String] -> [String]
 filterWords = filter . flip checkAgainstAll
 
+--------------------------------------------------------------------------------
 -- beyond here is deprecated stuff,
 -- using generated words instead of a master list
 
