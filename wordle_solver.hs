@@ -1,6 +1,7 @@
--- TODO: reimplement the main filter
+-- TODO: main
 
 -- import Text.Printf ()
+{-# LANGUAGE TupleSections #-}
 import System.IO ( stdout, hFlush )
 import qualified Data.Text as T
 import qualified WordList as W
@@ -9,6 +10,9 @@ import Data.Function ( on )
 type Pair = (Char, Char)
 type Info = (Matcher, [Char])
 type Matcher = String -> [Char] -> Bool
+
+-- instance Show (a -> b) where
+--          show a = "function"
 
 -- | Compose two functions.
 -- except that @g@ will be fed /two/ arguments instead of one
@@ -21,10 +25,7 @@ remove :: Eq a => a -> [a] -> [a]
 remove = filter . (/=)
 
 prompt :: String -> IO String
-prompt text = do
-    putStr text
-    hFlush stdout
-    getLine
+prompt text = putStr text >> hFlush stdout >> getLine
 
 splitOnString :: String -> String -> [String]
 splitOnString delim = map T.unpack . T.splitOn (T.pack delim) . T.pack
@@ -48,41 +49,6 @@ generatePairs = uncurry zip . (\[x, y] -> (x,y)) . splitOnString " = "
 --     print newWordList
 --     newCommand <- prompt "guess: "
 --     interactiveStep newCommand newWordList
-
-
-
--- matchGreens :: String -> [Char] -> Bool
--- matchGreens = and ... zipWith matcher where
---     matcher char '-' = True
---     matcher char green = char == green
-
--- generateWrongs :: [Pair] -> [Char]
--- generateWrongs = map format . filter pred where
---     pred (_, color) = color == 'w'
---     format (char, _) = char
-
--- matchWrongs :: String -> [Char] -> Bool
--- matchWrongs = all . flip notElem
-
--- generateGreens :: [Pair] -> [Info]
--- generateGreens pairs = [(matchAll, map format pairs)] where
---     format (char, color)
---         | color == 'g' = char
---         | otherwise    = '-'
-
-
-
--- this is in need of tidying
--- generateWrongs :: [Pair] -> [String]
--- generateWrongs pairs = map (propagateWrong (greens pairs)) (wrongs pairs) where
---     greens pairs = map fst (filter isGreen pairs)
---     wrongs pairs = map fst (filter isWrong pairs)
---     isGreen (_, color) = color == 'g'
---     isWrong (_, color) = color == 'w'
---     propagateWrong greens wrong = zipWith f (allWrong greens wrong) greens
---     f wrong '-' = wrong
---     f _      _  = '-'
---     allWrong greens wrong = replicate (length greens) wrong
 
 generateGuess :: String -> (String, String)
 generateGuess = (\[x, y] -> (x,y)) . splitOnString " = "
@@ -118,18 +84,20 @@ generateYellows (word, result) = output where
     properYellows' = map (matchAny,) $ excludeWrong wrongs properYellows
     output = (matchNone, wrongs) : properYellows'
 
+generateYellows' :: (String, String) -> String
+generateYellows' (word, result) = zipWith f word result where
+    f char1 char2 = if char2 == 'y' then char1 else '-'
+
 excludeWrong :: String -> [String] -> [String]
 excludeWrong = map . zipWith f where
     f '-' chr2 = chr2
     f chr1 chr2 = if chr1 /= chr2 then chr2 else '-'
 
-generateYellows' :: (String, String) -> String
-generateYellows' (word, result) = zipWith f word result where
-    f char1 char2 = if char2 == 'y' then char1 else '-'
-
 generateInfo :: (String, String) -> [Info]
-generateInfo guess = generateGreens guess ++ generateWrongs guess
-
+generateInfo guess =
+    generateGreens guess
+    ++ generateWrongs guess
+    ++ generateYellows guess
 
 -- "idiot = wygyw"
 -- [('i','w'),('d','y'),('i','g'),('o','y'),('t','w')]
@@ -167,48 +135,8 @@ checkAgainst str (matcher, chrs) = matcher (needsToBeMatched str chrs) chrs
 checkAgainstAll :: String -> [(Matcher, [Char])] -> Bool
 checkAgainstAll = all . checkAgainst
 
--- generateYellows :: [Pair] -> [(Char, [Int])]
--- generateYellows pairs = map properYellow allYellows where
---     indexedPairs = insertIndex pairs
---     combinePairList = zipWith (++)
---     -- known = combinePairList (map f pairs) greens
---     isYellow  (_, color, _) = color == 'y'
---     isUnknown (_, color, _) = color /= 'g'
---     onlyIndex (_, _    , n) = n
-
---     allYellows = filter isYellow indexedPairs
---     allUnknowns = map onlyIndex $ filter isUnknown indexedPairs
---     properYellow (char, color, n) = (char, remove n allUnknowns )
-
---     insertIndex pairs = zipWith f pairs indexes
---     f (x, y) n = (x, y, n)
---     indexes = [0 .. (length pairs - 1)]
-
--- matchYellows :: String -> [(Char, [Int])] -> Bool
--- matchYellows = all . matchOneYellow where
---     matchOneYellow str (char, ns) = any (g str char) ns
---     g str char n = str !! n == char
-
--- generateInfo command = (greens, yellows, wrongs) where
---     pairs = generatePairs command
---     greens = generateGreens pairs
---     yellows = generateYellows pairs
---     wrongs = generateWrongs pairs
-
--- matchInfo :: Info -> String -> Bool
--- matchInfo(greens, yellows, wrongs) str  =
---     matchesGreen && matchesYellow && matchesWrong where
---     matchesGreen = matchGreens str greens
---     matchesYellow = matchYellows str yellows
---     matchesWrong = matchWrongs str wrongs
-
--- step :: String -> [String] -> [String]
--- step command wordList = newWords where
---     info = generateInfo command
---     newWords = filterWords info wordList
-
--- filterWords :: Info ->  [String] -> [String]
--- filterWords = filter . matchInfo
+filterWords ::[Info] -> [String] -> [String]
+filterWords = filter . flip checkAgainstAll
 
 -- beyond here is deprecated stuff,
 -- using generated words instead of a master list
