@@ -1,15 +1,9 @@
--- TODO:
---      nicer output
---      refactors
---      usage text
-
--- import Text.Printf ()
 {-# LANGUAGE TupleSections #-}
+module Backend where
 import System.IO ( stdout, hFlush )
 import qualified Data.Text as T
-import qualified WordList as W
+
 import Data.Function ( on )
-import Data.List (sort)
 
 type Pair = (Char, Char)
 type Info = (Matcher, [Char])
@@ -33,20 +27,6 @@ prompt text = putStr text >> hFlush stdout >> getLine
 
 splitOnString :: String -> String -> [String]
 splitOnString delim = map T.unpack . T.splitOn (T.pack delim) . T.pack
-
-main :: IO ()
-main = f [] where
-    f words = do
-        if null words then
-            f $ sort W.allWords -- this sort is here to minimize cheatiness
-        else do
-            userInput <- prompt "guess: "
-            if userInput == "quit" then
-                putStrLn "quitting"
-            else do
-                let newWords = step words userInput
-                print newWords
-                f newWords
 
 step :: [String] -> String -> [String]
 step = flip $ filterWords . generateInfo . generateGuess
