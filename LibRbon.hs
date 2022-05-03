@@ -50,7 +50,7 @@ splitOn = map T.unpack ... T.splitOn `on` T.pack
 --
 -- > concatMap f xs = concat (map f xs)
 (...) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
-(f ... g) x y = f (g x y)
+(...) = (.) . (.)
 infixr 8 ...
 
 -- think of this as a pipe that feeds the right function two arguments
