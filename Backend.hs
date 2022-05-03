@@ -1,8 +1,10 @@
+-- TODO: refactors
+
 {-# LANGUAGE TupleSections #-}
 module Backend (step) where
 
-import LibRbon (remove, splitOn, (!=))
-import Data.Function ( on )
+import LibRbon (remove, splitOn, (!=), (...))
+import Data.Function (on)
 
 type Pair = (Char, Char)
 type Info = (Matcher, [Char])
@@ -10,13 +12,6 @@ type Matcher = String -> [Char] -> Bool
 
 instance Show (a -> b) where
          show a = "function"
-
--- | Compose two functions.
--- except that @g@ will be fed /two/ arguments instead of one
--- before handing its result to @f@.
-(...) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
-(f ... g) x y = f (g x y)
-infixr 8 ...
 
 step :: [String] -> String -> [String]
 step = flip $ filterWords . generateInfo . generateGuess
