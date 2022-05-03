@@ -1,8 +1,7 @@
 {-# LANGUAGE TupleSections #-}
-module Backend where
-import System.IO ( stdout, hFlush )
-import qualified Data.Text as T
+module Backend (step) where
 
+import LibRbon (remove, splitOn, (!=))
 import Data.Function ( on )
 
 type Pair = (Char, Char)
@@ -19,23 +18,14 @@ instance Show (a -> b) where
 (f ... g) x y = f (g x y)
 infixr 8 ...
 
-remove :: Eq a => a -> [a] -> [a]
-remove = filter . (/=)
-
-prompt :: String -> IO String
-prompt text = putStr text >> hFlush stdout >> getLine
-
-splitOnString :: String -> String -> [String]
-splitOnString delim = map T.unpack . T.splitOn (T.pack delim) . T.pack
-
 step :: [String] -> String -> [String]
 step = flip $ filterWords . generateInfo . generateGuess
 
 generatePairs :: String -> [Pair]
-generatePairs = uncurry zip . (\[x, y] -> (x,y)) . splitOnString " = "
+generatePairs = uncurry zip . (\[x, y] -> (x,y)) . splitOn " = "
 
 generateGuess :: String -> (String, String)
-generateGuess = (\[x, y] -> (x,y)) . splitOnString " = "
+generateGuess = (\[x, y] -> (x,y)) . splitOn " = "
 
 generateGreens :: (String, String) -> [Info]
 generateGreens (word, result) = [(matchAll, zipWith f word result)] where
@@ -43,8 +33,8 @@ generateGreens (word, result) = [(matchAll, zipWith f word result)] where
 
 generateWrongs :: (String, String) -> [Info]
 generateWrongs (word, result) = map (matchNone,) properWrongs where
-    wrongs' = filter (/= '-') $ generateWrongs' (word, result)
-    yellows = filter (/= '-') $ generateYellows' (word, result)
+    wrongs' = filter (!= '-') $ generateWrongs' (word, result)
+    yellows = filter (!= '-') $ generateYellows' (word, result)
     wrongs = accountForYellows wrongs' yellows
     unknowns = generateUnknowns (word, result)
     properWrongs = map (propagateLetter unknowns) wrongs
@@ -59,16 +49,16 @@ generateWrongs' (word, result) = zipWith f word result where
 
 propagateLetter :: String -> Char -> String
 propagateLetter str char = map (f char) str where
-    f char1 char2 = if char2 /= '-' then char1 else '-'
+    f char1 char2 = if char2 != '-' then char1 else '-'
 
 generateUnknowns :: (String, String) -> String
 generateUnknowns (word, result) = zipWith f word result where
-    f char1 char2 = if char2 /= 'g' then char1 else '-'
+    f char1 char2 = if char2 != 'g' then char1 else '-'
 
 generateYellows :: (String, String) -> [Info]
 generateYellows (word, result) = output where
     wrongs = generateYellows' (word, result)
-    yellows = filter (/= '-') $ generateYellows' (word, result)
+    yellows = filter (!= '-') $ generateYellows' (word, result)
     unknowns = generateUnknowns (word, result)
     properYellows = map (propagateLetter unknowns) yellows
     properYellows' = map (matchAny,) $ excludeWrong wrongs properYellows
@@ -81,7 +71,7 @@ generateYellows' (word, result) = zipWith f word result where
 excludeWrong :: String -> [String] -> [String]
 excludeWrong = map . zipWith f where
     f '-' chr2 = chr2
-    f chr1 chr2 = if chr1 /= chr2 then chr2 else '-'
+    f chr1 chr2 = if chr1 != chr2 then chr2 else '-'
 
 generateInfo :: (String, String) -> [Info]
 generateInfo guess =
@@ -95,13 +85,13 @@ needsToBeMatched = zipWith f where
     f char  _  = char
 
 matchAny :: String -> [Char] -> Bool
-matchAny = or ... zipWith (==) `on` filter (/= '-')
+matchAny = or ... zipWith (==) `on` filter (!= '-')
 
 matchNone :: String -> [Char] -> Bool
 matchNone = not ... matchAny
 
 matchAll :: String -> [Char] -> Bool
-matchAll = and ... zipWith (==) `on` filter (/= '-')
+matchAll = and ... zipWith (==) `on` filter (!= '-')
 
 checkAgainst :: String -> (Matcher, [Char]) -> Bool
 checkAgainst str (matcher, chrs) = matcher (needsToBeMatched str chrs) chrs

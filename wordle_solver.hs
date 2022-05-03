@@ -8,6 +8,8 @@
 import Backend
 import qualified WordList as W
 import Data.List (sort)
+import System.IO ( stdout, hFlush )
+import LibRbon (prompt)
 
 main :: IO ()
 main = f [] where
@@ -22,3 +24,4 @@ main = f [] where
                 let newWords = step words userInput
                 print newWords
                 f newWords
+
