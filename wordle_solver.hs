@@ -1,4 +1,7 @@
--- TODO: refactors
+-- TODO:
+--      nicer output
+--      refactors
+--      usage text
 
 -- import Text.Printf ()
 {-# LANGUAGE TupleSections #-}
@@ -32,20 +35,18 @@ splitOnString :: String -> String -> [String]
 splitOnString delim = map T.unpack . T.splitOn (T.pack delim) . T.pack
 
 main :: IO ()
-main = mainLoop []
-
-mainLoop :: [String] -> IO ()
-mainLoop words = do
-    if null words then
-        mainLoop $ sort W.allWords -- this sort is here to minimize cheatiness
-    else do
-        userInput <- prompt "guess: "
-        if userInput == "quit" then
-            putStrLn "quitting"
+main = f [] where
+    f words = do
+        if null words then
+            f $ sort W.allWords -- this sort is here to minimize cheatiness
         else do
-            let newWords = step words userInput
-            print newWords
-            mainLoop newWords
+            userInput <- prompt "guess: "
+            if userInput == "quit" then
+                putStrLn "quitting"
+            else do
+                let newWords = step words userInput
+                print newWords
+                f newWords
 
 step :: [String] -> String -> [String]
 step = flip $ filterWords . generateInfo . generateGuess
